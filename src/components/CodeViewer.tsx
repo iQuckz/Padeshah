@@ -89,11 +89,11 @@ export default function CodeViewer({ ranks }: CodeViewerProps) {
           <Shield className="w-4 h-4 text-emerald-400 shrink-0" />
           <span>
             {activeTab === 'worker' 
-              ? 'این کد شامل ضداسپم، هندلر کلیک دکمه‌های شیشه‌ای، و دستورات ادمین ریپلای است.'
+              ? 'این کد شامل ضداسپم، هندلر کلیک دکمه‌های شیشه‌ای، و دستورات ادمین ریپلای به زبان جاوااسکریپت خالص است.'
               : 'اسکیما شامل جداول تنظیمات، لیست درجات، و آمار کاربران است که در D1 ماندگار می‌ماند.'}
           </span>
         </div>
-        <span className="text-[10px] text-slate-500">کاملاً بهینه‌سازی شده بدون وابستگی خارجی (No Wrangler)</span>
+        <span className="text-[10px] text-slate-500 font-bold text-emerald-400">۱۰۰٪ جاوااسکریپت خالص (بدون نیاز به Wrangler و هیچ ابزار یا برنامه خارجی)</span>
       </div>
 
     </div>

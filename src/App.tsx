@@ -132,9 +132,9 @@ export default function App() {
           <div className="flex gap-3.5 items-start">
             <Sparkles className="w-5 h-5 text-amber-400 shrink-0 mt-1" />
             <div>
-              <h3 className="text-sm font-bold text-slate-200">کسب رتبه‌های نظامی با چت گروهی تلگرام</h3>
+              <h3 className="text-sm font-bold text-slate-200">اجرای ۱۰۰٪ روی کلادفلر با کدهای جاوااسکریپت خالص (بدون Wrangler و سرور جانبی)</h3>
               <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                این پلتفرم به شما اجازه می‌دهد رتبه‌های تلگرامی (به صورت تگ کنار نام کاربران بدون نیاز به ادمین کردن آنها با متد رسمی <code>setChatMemberTag</code>) را به صورت کاملاً زنده شبیه‌سازی کنید، درجات فرضی بسازید و کدهای آماده را مستقیم در پنل رایگان Cloudflare Workers کپی کنید.
+                تمام بخش‌های این ربات شامل کدهای پردازشگر (Worker) و دیتابیس (D1) به صورت <b>کاملاً رایگان و مستقیم روی کلادفلر</b> نصب می‌شوند. برای استفاده از کدهای نهایی به هیچ سرور خارجی، برنامه جانبی یا ابزار سختی مثل Wrangler نیاز ندارید؛ کدهای خروجی <b>جاوااسکریپت خالص (Pure JS)</b> هستند که کافیست آن‌ها را کپی کرده و در ادیتور آنلاین کلودفلر پیست کنید.
               </p>
             </div>
           </div>
@@ -150,7 +150,7 @@ export default function App() {
               onClick={() => setActiveTab('code')}
               className="text-xs font-bold text-amber-500 bg-amber-500/10 px-3.5 py-2 rounded-lg border border-amber-500/20 hover:bg-amber-500/20 transition-all cursor-pointer shrink-0"
             >
-              کدهای آماده نهایی
+              کدهای آماده نهایی (JS)
             </button>
           </div>
         </section>
