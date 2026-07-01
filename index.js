@@ -291,9 +291,15 @@ async function handleCallbackQuery(callbackQuery, env) {
   if (data.startsWith("select_pv_chat_") || data === "pv_change_group") {
     let targetChatId = data === "pv_change_group" ? null : parseInt(data.substring(15));
     if (!targetChatId) {
-      const activeUserGroups = await env.DB.prepare("SELECT u.*, s.chat_title, s.owner_id FROM users u JOIN settings s ON u.chat_id = s.chat_id WHERE u.user_id = ? AND u.is_active = 1").bind(clickerId).all();
+      const userGroupsQuery = await env.DB.prepare(`
+        SELECT DISTINCT s.chat_id, s.chat_title, s.owner_id, s.congrats_mode
+        FROM settings s
+        LEFT JOIN users u ON s.chat_id = u.chat_id AND u.user_id = ?
+        WHERE u.user_id = ? OR s.owner_id = ?
+      `).bind(clickerId, clickerId, clickerId).all();
+      const activeUserGroups = userGroupsQuery.results || [];
       const listText = `⚔️ <b>| گزینش جبهه نبرد (انتخاب گروه)</b>\n━━━━━━━━━━━━━━━━━━\nشما در چندین گروه نظامی فعال هستید. لطفاً گروه مورد نظر خود را جهت مشاهده اطلاعات پرونده یا چارت برگزینید:\n\n`;
-      const buttons = activeUserGroups.results.map((g, idx) => [{ text: `🏰 ${g.chat_title || "جبهه " + toPersianDigits(idx + 1)}`, callback_data: `select_pv_chat_${g.chat_id}` }]);
+      const buttons = activeUserGroups.map((g, idx) => [{ text: `🏰 ${g.chat_title || "جبهه " + toPersianDigits(idx + 1)}`, callback_data: `select_pv_chat_${g.chat_id}` }]);
       await sendOrEditMessage(botToken, clickerId, listText, messageId, buttons, true);
       return new Response("OK", { status: 200 });
     }
@@ -391,25 +397,25 @@ async function handleMessage(message, env) {
   else if (processedText === "⚙️ راهنما و پشتیبانی" || processedText === "راهنما") processedText = "/help";
 
   if (isPrivate) {
-    const activeUserGroups = await env.DB.prepare("SELECT u.*, s.chat_title, s.owner_id FROM users u JOIN settings s ON u.chat_id = s.chat_id WHERE u.user_id = ? AND u.is_active = 1").bind(userId).all();
-    if (!activeUserGroups.results || activeUserGroups.results.length === 0) {
-      const owned = await env.DB.prepare("SELECT * FROM settings WHERE owner_id = ?").bind(userId).all();
-      if (owned.results && owned.results.length > 0) {
-        const activeGroup = owned.results[0];
-        const ranksForGroup = await getOrSeedRanks(env, activeGroup.chat_id);
-        return await routePrivateCommand(processedText, botToken, chatId, userId, firstName, message.message_id, env, ranksForGroup, activeGroup);
-      }
+    const userGroupsQuery = await env.DB.prepare(`
+      SELECT DISTINCT s.chat_id, s.chat_title, s.owner_id, s.congrats_mode
+      FROM settings s
+      LEFT JOIN users u ON s.chat_id = u.chat_id AND u.user_id = ?
+      WHERE u.user_id = ? OR s.owner_id = ?
+    `).bind(userId, userId, userId).all();
+    const activeUserGroups = userGroupsQuery.results || [];
+    if (activeUserGroups.length === 0) {
       await sendMessage(botToken, chatId, `👋 <b>درود بر شما، ${firstName} عزیز!</b>\n\nشما هنوز در هیچ‌کدام از گروه‌های تحت نظارت من عضو و فعال نشده‌اید. لطفاً در یکی از گروه‌هایی که من فعال هستم گپ بزنید تا پرونده شما فعال شود.`);
       return new Response("OK", { status: 200 });
     }
-    if (activeUserGroups.results.length === 1) {
-      const activeGroupUser = activeUserGroups.results[0];
+    if (activeUserGroups.length === 1) {
+      const activeGroupUser = activeUserGroups[0];
       const settings = { chat_id: activeGroupUser.chat_id, owner_id: activeGroupUser.owner_id, chat_title: activeGroupUser.chat_title, congrats_mode: activeGroupUser.congrats_mode || 'direct' };
       const ranksForGroup = await getOrSeedRanks(env, settings.chat_id);
       return await routePrivateCommand(processedText, botToken, chatId, userId, firstName, message.message_id, env, ranksForGroup, settings);
     } else {
       const listText = `⚔️ <b>| گزینش جبهه نبرد (انتخاب گروه)</b>\n━━━━━━━━━━━━━━━━━━\nشما در چندین گروه نظامی فعال هستید. لطفاً گروه مورد نظر خود را برگزینید:\n\n`;
-      const buttons = activeUserGroups.results.map((g, idx) => [{ text: `🏰 ${g.chat_title || "جبهه " + toPersianDigits(idx + 1)}`, callback_data: `select_pv_chat_${g.chat_id}` }]);
+      const buttons = activeUserGroups.map((g, idx) => [{ text: `🏰 ${g.chat_title || "جبهه " + toPersianDigits(idx + 1)}`, callback_data: `select_pv_chat_${g.chat_id}` }]);
       await apiCall(botToken, "sendMessage", { chat_id: chatId, text: listText, reply_markup: { inline_keyboard: buttons } });
       return new Response("OK", { status: 200 });
     }
@@ -482,8 +488,24 @@ async function handleMessage(message, env) {
   }
 
   if (userId === settings.owner_id) {
-    await env.DB.prepare("INSERT OR IGNORE INTO users (chat_id, user_id, first_name, username, message_count, current_rank_id, last_message_at, is_active) VALUES (?, ?, ?, ?, 999999, 999, ?, 1)")
-      .bind(chatId, userId, firstName, username, Math.floor(Date.now() / 1000)).run();
+    const currentTime = Math.floor(Date.now() / 1000);
+    const dbUserBefore = await env.DB.prepare("SELECT * FROM users WHERE chat_id = ? AND user_id = ?").bind(chatId, userId).first();
+    await env.DB.prepare(`
+      INSERT INTO users (chat_id, user_id, first_name, username, message_count, weekly_message_count, weekly_reset_at, current_rank_id, last_message_at, is_active)
+      VALUES (?1, ?2, ?3, ?4, 1, 1, ?5, 999, ?5, 1)
+      ON CONFLICT(chat_id, user_id) DO UPDATE SET
+        first_name = excluded.first_name,
+        username = excluded.username,
+        message_count = users.message_count + 1,
+        weekly_message_count = CASE WHEN ?5 - users.weekly_reset_at >= 604800 THEN 1 ELSE users.weekly_message_count + 1 END,
+        weekly_reset_at = CASE WHEN ?5 - users.weekly_reset_at >= 604800 THEN ?5 ELSE users.weekly_reset_at END,
+        last_message_at = ?5,
+        is_active = 1
+    `).bind(chatId, userId, firstName, username, currentTime).run();
+
+    if (!dbUserBefore || dbUserBefore.current_rank_id !== 999) {
+      await setChatMemberTag(botToken, chatId, userId, "شاهنشاه", settings.owner_id);
+    }
     return new Response("OK", { status: 200 });
   }
 
@@ -530,7 +552,10 @@ async function routePrivateCommand(processedText, botToken, chatId, userId, firs
 
 async function handleRankCommand(botToken, chatId, userId, firstName, messageId, env, currentRanks, settings, replyMarkupOverride = null, isEdit = false) {
   if (userId === settings.owner_id) {
-    const ownerText = `👑 <b>| مقام سلطنتی شاهنشاه اعظم</b>\n━━━━━━━━━━━━━━━━━━\n👤 <b>نام فرمانروا:</b> <code>${firstName}</code>\n🎖️ <b>درجه دائمی:</b> <code>شاهنشاه</code>\n\n🔱 شما جایگاه جاودان و ابدی بالای هرم نظامی را دارا هستید و نیازی به ارزیابی درجه ندارید.`;
+    const dbUser = await env.DB.prepare("SELECT * FROM users WHERE chat_id = ? AND user_id = ?").bind(settings.chat_id, userId).first();
+    const count = dbUser ? dbUser.message_count : 0;
+    const weeklyCount = dbUser ? dbUser.weekly_message_count : 0;
+    const ownerText = `👑 <b>| مقام سلطنتی شاهنشاه اعظم</b>\n━━━━━━━━━━━━━━━━━━\n👤 <b>نام فرمانروا:</b> <code>${firstName}</code>\n🎖️ <b>درجه دائمی:</b> <code>شاهنشاه</code>\n✉️ <b>کل پیام‌ها:</b> <code>${toPersianDigits(count)}</code>\n📅 <b>پیام‌های این هفته:</b> <code>${toPersianDigits(weeklyCount)}</code>\n━━━━━━━━━━━━━━━━━━\n🔱 شما جایگاه جاودان و ابدی بالای هرم نظامی را دارا هستید و نیازی به ارزیابی درجه ندارید.`;
     const buttons = [[{ text: "📊 جدول برترین‌ها (چارت)", callback_data: "show_chart_click" }, { text: "📜 لیست درجات نظامی", callback_data: "show_ranks_click" }]];
     await sendOrEditMessage(botToken, chatId, ownerText, messageId, replyMarkupOverride || buttons, isEdit);
     return new Response("OK", { status: 200 });
@@ -574,12 +599,17 @@ async function handleRankCommand(botToken, chatId, userId, firstName, messageId,
 async function handleChartCommand(botToken, chatId, messageId, env, currentRanks, settings, isEdit = false) {
   const topUsers = await env.DB.prepare("SELECT * FROM users WHERE chat_id = ? AND user_id != ? AND is_active = 1 ORDER BY message_count DESC LIMIT 15").bind(settings.chat_id, settings.owner_id).all();
   let ownerName = "شاهنشاه";
+  let ownerMessages = 0;
   try {
     const ownerRes = await apiCall(botToken, "getChatMember", { chat_id: settings.chat_id, user_id: settings.owner_id });
     if (ownerRes.ok) ownerName = ownerRes.result.user.first_name;
   } catch {}
+  try {
+    const ownerDb = await env.DB.prepare("SELECT message_count FROM users WHERE chat_id = ? AND user_id = ?").bind(settings.chat_id, settings.owner_id).first();
+    if (ownerDb) ownerMessages = ownerDb.message_count;
+  } catch {}
 
-  let chartText = `🏆 <b>| چارت مقامات و تالار افتخارات گروه</b>\n━━━━━━━━━━━━━━━━━━\n👑 <b>شاهنشاه (مالک ارشد):</b> <code>${ownerName}</code>\n━━━━━━━━━━━━━━━━━━\n`;
+  let chartText = `🏆 <b>| چارت مقامات و تالار افتخارات گروه</b>\n━━━━━━━━━━━━━━━━━━\n👑 <b>شاهنشاه (مالک ارشد):</b> <code>${ownerName}</code> (✉️ <code>${toPersianDigits(ownerMessages)}</code>)\n━━━━━━━━━━━━━━━━━━\n`;
   if (topUsers.results && topUsers.results.length > 0) {
     topUsers.results.forEach((user, idx) => {
       const userRank = currentRanks.find(r => r.id === user.current_rank_id) || currentRanks[0];
@@ -602,7 +632,18 @@ async function handleWeeklyChartCommand(botToken, chatId, messageId, env, curren
   const currentTime = Math.floor(Date.now() / 1000);
   const topUsers = await env.DB.prepare("SELECT * FROM users WHERE chat_id = ? AND user_id != ? AND is_active = 1 AND (?1 - weekly_reset_at < 604800) AND weekly_message_count > 0 ORDER BY weekly_message_count DESC LIMIT 15").bind(settings.chat_id, settings.owner_id, currentTime).all();
 
-  let text = `📅 <b>| چارت هفتگی و مبارزین فعال ۷ روز گذشته</b>\n━━━━━━━━━━━━━━━━━━\n<i>پیام‌های ارسالی در یک هفته اخیر:</i>\n\n`;
+  let ownerName = "شاهنشاه";
+  let ownerWeeklyMessages = 0;
+  try {
+    const ownerRes = await apiCall(botToken, "getChatMember", { chat_id: settings.chat_id, user_id: settings.owner_id });
+    if (ownerRes.ok) ownerName = ownerRes.result.user.first_name;
+  } catch {}
+  try {
+    const ownerDb = await env.DB.prepare("SELECT weekly_message_count FROM users WHERE chat_id = ? AND user_id = ?").bind(settings.chat_id, settings.owner_id).first();
+    if (ownerDb) ownerWeeklyMessages = ownerDb.weekly_message_count;
+  } catch {}
+
+  let text = `📅 <b>| چارت هفتگی و مبارزین فعال ۷ روز گذشته</b>\n━━━━━━━━━━━━━━━━━━\n👑 <b>شاهنشاه (مالک ارشد):</b> <code>${ownerName}</code> (✉️ <code>${toPersianDigits(ownerWeeklyMessages)}</code>)\n━━━━━━━━━━━━━━━━━━\n<i>پیام‌های ارسالی در یک هفته اخیر:</i>\n\n`;
   if (topUsers.results && topUsers.results.length > 0) {
     topUsers.results.forEach((user, idx) => {
       const userRank = currentRanks.find(r => r.id === user.current_rank_id) || currentRanks[0];

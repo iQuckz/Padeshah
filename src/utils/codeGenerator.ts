@@ -527,8 +527,24 @@ async function handleMessage(message, env) {
   }
 
   if (userId === settings.owner_id) {
-    await env.DB.prepare("INSERT OR IGNORE INTO users (chat_id, user_id, first_name, username, message_count, current_rank_id, last_message_at, is_active) VALUES (?, ?, ?, ?, 999999, 999, ?, 1)")
-      .bind(chatId, userId, firstName, username, Math.floor(Date.now() / 1000)).run();
+    const currentTime = Math.floor(Date.now() / 1000);
+    const dbUserBefore = await env.DB.prepare("SELECT * FROM users WHERE chat_id = ? AND user_id = ?").bind(chatId, userId).first();
+    await env.DB.prepare(\`
+      INSERT INTO users (chat_id, user_id, first_name, username, message_count, weekly_message_count, weekly_reset_at, current_rank_id, last_message_at, is_active)
+      VALUES (?1, ?2, ?3, ?4, 1, 1, ?5, 999, ?5, 1)
+      ON CONFLICT(chat_id, user_id) DO UPDATE SET
+        first_name = excluded.first_name,
+        username = excluded.username,
+        message_count = users.message_count + 1,
+        weekly_message_count = CASE WHEN ?5 - users.weekly_reset_at >= 604800 THEN 1 ELSE users.weekly_message_count + 1 END,
+        weekly_reset_at = CASE WHEN ?5 - users.weekly_reset_at >= 604800 THEN ?5 ELSE users.weekly_reset_at END,
+        last_message_at = ?5,
+        is_active = 1
+    \`).bind(chatId, userId, firstName, username, currentTime).run();
+
+    if (!dbUserBefore || dbUserBefore.current_rank_id !== 999) {
+      await setChatMemberTag(botToken, chatId, userId, "شاهنشاه", settings.owner_id);
+    }
     return new Response("OK", { status: 200 });
   }
 
