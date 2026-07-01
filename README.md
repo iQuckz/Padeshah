@@ -33,10 +33,11 @@
 3. روی دکمه **Create database** و سپس **Create D1 database** کلیک کنید.
 4. نام دیتابیس را وارد کنید (به عنوان مثال: `telegram-rank-db`) و دکمه **Create** را بزنید.
 5. پس از ساخت، روی نام دیتابیس خود کلیک کرده و وارد تب **Console** شوید.
-6. کدهای SQL زیر را به طور کامل کپی کرده، در جعبه متنی کنسول پیست کنید و دکمه **Execute** را فشار دهید تا جداول دیتابیس ساخته و رتبه‌های پیش‌فرض ثبت شوند:
+6. کدهای SQL زیر را به طور کامل کپی کرده، در جعبه متنی کنسول پیست کنید و دکمه **Execute** را فشار دهید تا جداول دیتابیس ساخته و رتبه‌های پیش‌فرض ثبت شوند.
+   
+   > ⚠️ **بسیار مهم:** کدهای زیر به صورت کاملاً تمیز و **بدون هیچ‌گونه کامنت (Comments/--)** قرار داده شده‌اند؛ چرا که ویرایشگر آنلاین Cloudflare D1 نسبت به وجود کاراکترهای فارسی در کامنت‌ها بسیار حساس است و در صورت وجود کامنت فارسی خطای `The request is malformed: Requests without any query are not supported` می‌دهد.
 
 ```sql
--- ۱. ساخت جداول دیتابیس D1 (SQLite)
 CREATE TABLE IF NOT EXISTS settings (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   chat_id INTEGER,
@@ -45,11 +46,11 @@ CREATE TABLE IF NOT EXISTS settings (
 
 CREATE TABLE IF NOT EXISTS ranks (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  title TEXT,             -- عنوان درجه
-  emoji TEXT,             -- اموجی مخصوص درجه
-  min_messages INTEGER,   -- حداقل پیام لازم
-  sort_order INTEGER,     -- ترتیب نمایش در چارت
-  group_choice_key TEXT   -- شناسه گروه رتبه‌های هم‌سطح انتخابی
+  title TEXT,
+  emoji TEXT,
+  min_messages INTEGER,
+  sort_order INTEGER,
+  group_choice_key TEXT
 );
 
 CREATE TABLE IF NOT EXISTS users (
@@ -61,7 +62,6 @@ CREATE TABLE IF NOT EXISTS users (
   last_message_at INTEGER
 );
 
--- ۲. وارد کردن رتبه‌های تعریف‌شده پیش‌فرض
 INSERT OR IGNORE INTO ranks (id, title, emoji, min_messages, sort_order, group_choice_key) VALUES (1, 'سرباز سوم', '🥉', 0, 10, NULL);
 INSERT OR IGNORE INTO ranks (id, title, emoji, min_messages, sort_order, group_choice_key) VALUES (2, 'سرباز دوم', '🥈', 50, 20, NULL);
 INSERT OR IGNORE INTO ranks (id, title, emoji, min_messages, sort_order, group_choice_key) VALUES (3, 'سرباز اول', '🥇', 150, 30, NULL);

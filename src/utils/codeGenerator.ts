@@ -10,8 +10,7 @@ export function generateSqlSchema(ranks: Rank[]): string {
     insertRanksSql += `INSERT OR IGNORE INTO ranks (id, title, emoji, min_messages, sort_order, group_choice_key) VALUES (${r.id}, '${r.title}', '${r.emoji}', ${r.min_messages}, ${r.sort_order || (idx + 1) * 10}, ${choiceKey});\n`;
   });
 
-  return `-- ۱. ساخت جداول دیتابیس D1 (SQLite)
-CREATE TABLE IF NOT EXISTS settings (
+  return `CREATE TABLE IF NOT EXISTS settings (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   chat_id INTEGER,
   owner_id INTEGER
@@ -19,11 +18,11 @@ CREATE TABLE IF NOT EXISTS settings (
 
 CREATE TABLE IF NOT EXISTS ranks (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  title TEXT,             -- مثلا "سرباز سوم"
-  emoji TEXT,             -- اموجی مخصوص رتبه
-  min_messages INTEGER,   -- حداقل پیام لازم برای این رتبه
-  sort_order INTEGER,     -- ترتیب نمایش در چارت (کوچک به بزرگ)
-  group_choice_key TEXT   -- اگر چند رتبه همسطح با یک آستانه باشن، این کلید مشترک باشه تا ربات بفهمه اینا انتخابیان
+  title TEXT,
+  emoji TEXT,
+  min_messages INTEGER,
+  sort_order INTEGER,
+  group_choice_key TEXT
 );
 
 CREATE TABLE IF NOT EXISTS users (
@@ -35,11 +34,7 @@ CREATE TABLE IF NOT EXISTS users (
   last_message_at INTEGER
 );
 
--- ۲. وارد کردن رتبه‌های تعریف‌شده
-${insertRanksSql}
--- ۳. مقداردهی اولیه تنظیمات (اختیاری - در صورت داشتن مقادیر پیش‌فرض)
--- INSERT OR IGNORE INTO settings (id, chat_id, owner_id) VALUES (1, -100123456789, 12345678);
-`;
+${insertRanksSql}`;
 }
 
 export function generateWorkerCode(ranks: Rank[]): string {
