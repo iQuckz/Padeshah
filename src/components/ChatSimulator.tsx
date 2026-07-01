@@ -44,6 +44,26 @@ export default function ChatSimulator({ ranks, onSqlLog, sqlLogs, onClearLogs }:
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  const getAvatarGradient = (userId: number) => {
+    const gradients = [
+      'from-blue-500 to-indigo-600 text-white',
+      'from-emerald-500 to-teal-600 text-white',
+      'from-rose-500 to-pink-600 text-white',
+      'from-amber-400 to-orange-500 text-slate-950 font-bold',
+      'from-purple-500 to-fuchsia-600 text-white',
+      'from-sky-400 to-cyan-500 text-slate-950 font-bold'
+    ];
+    return gradients[userId % gradients.length];
+  };
+
+  const getInitials = (name: string) => {
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[1][0]}`;
+    }
+    return name.substring(0, 2);
+  };
+
   // Helper to get user's current rank
   const getUserRank = (user: User): Rank => {
     if (user.is_owner) {
@@ -618,17 +638,17 @@ export default function ChatSimulator({ ranks, onSqlLog, sqlLogs, onClearLogs }:
       <div className="xl:col-span-5 space-y-6">
         
         {/* Simulation Settings */}
-        <div className="bg-[#1e293b]/90 backdrop-blur-md rounded-2xl border border-slate-700/60 p-5">
-          <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2 mb-4">
-            <span className="text-amber-400">⚙️</span>
+        <div className="bg-slate-900/80 backdrop-blur-md rounded-2xl border border-slate-800 p-5 md:p-6 shadow-xl shadow-slate-950/10">
+          <h3 className="text-lg font-black text-slate-100 flex items-center gap-2.5 mb-5">
+            <span className="text-amber-500 text-xl animate-pulse">⚙️</span>
             پنل کنترل و شبیه‌سازی کاربران
           </h3>
 
-          <div className="space-y-4">
+          <div className="space-y-5">
             {/* Sender Selector */}
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-2">انتخاب کاربر سخنگو:</label>
-              <div className="space-y-2 max-h-[220px] overflow-y-auto p-1.5 bg-slate-950/60 rounded-xl border border-slate-800">
+              <label className="block text-xs font-bold text-slate-400 mb-2.5">انتخاب کاربر گوینده پیام (فرستنده فعلی):</label>
+              <div className="space-y-2 max-h-[250px] overflow-y-auto p-2 bg-slate-950/60 rounded-xl border border-slate-800 shadow-inner">
                 {users.map(u => {
                   const r = getUserRank(u);
                   const isSelected = selectedUserId === u.user_id;
@@ -639,30 +659,39 @@ export default function ChatSimulator({ ranks, onSqlLog, sqlLogs, onClearLogs }:
                         setSelectedUserId(u.user_id);
                         setReplyToMsg(null);
                       }}
-                      className={`w-full flex items-center justify-between p-2.5 rounded-lg transition-all text-right cursor-pointer ${
+                      className={`w-full flex items-center justify-between p-3 rounded-lg transition-all text-right cursor-pointer ${
                         isSelected 
-                          ? 'bg-amber-500/15 border border-amber-500/40 text-amber-300' 
+                          ? 'bg-amber-500/10 border border-amber-500/30 text-amber-300 ring-1 ring-amber-500/10' 
                           : 'hover:bg-slate-800/40 text-slate-300 border border-transparent'
                       }`}
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">{r.emoji}</span>
+                      <div className="flex items-center gap-3">
+                        <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shadow-md bg-gradient-to-tr ${getAvatarGradient(u.user_id)}`}>
+                          {getInitials(u.first_name)}
+                        </div>
                         <div>
-                          <div className="font-semibold text-xs flex items-center gap-1">
+                          <div className="font-bold text-xs flex items-center gap-1.5">
                             {u.first_name}
-                            {u.is_owner && <span className="text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1 rounded">مالک</span>}
+                            {u.is_owner && (
+                              <span className="text-[9px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded-md font-extrabold">
+                                مالک
+                              </span>
+                            )}
                           </div>
-                          <div className="text-[10px] text-slate-400 font-mono">
+                          <div className="text-[10px] text-slate-400 font-mono mt-0.5">
                             @{u.username || 'username_unknown'}
                           </div>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="bg-slate-900 px-2 py-0.5 rounded font-mono text-slate-400">
+                      <div className="flex items-center gap-3 text-xs">
+                        <span className="bg-slate-950 border border-slate-800/80 px-2 py-0.5 rounded-md font-mono text-slate-400 font-semibold text-[10px]">
                           {u.message_count} ✉️
                         </span>
-                        <span className="text-[10px] font-semibold text-slate-500">{r.title}</span>
+                        <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1">
+                          <span>{r.emoji}</span>
+                          <span>{r.title}</span>
+                        </span>
                       </div>
                     </button>
                   );
@@ -671,81 +700,81 @@ export default function ChatSimulator({ ranks, onSqlLog, sqlLogs, onClearLogs }:
             </div>
 
             {/* Quick Actions */}
-            <div className="pt-2">
+            <div className="pt-1">
               <button
                 onClick={() => setShowAddUser(!showAddUser)}
-                className="w-full flex items-center justify-center gap-2 py-2 border border-dashed border-slate-700 hover:border-slate-500 rounded-lg text-xs font-semibold text-slate-300 hover:text-slate-100 transition-colors cursor-pointer"
+                className="w-full flex items-center justify-center gap-2 py-2.5 border border-dashed border-slate-800 hover:border-slate-600 rounded-xl text-xs font-bold text-slate-400 hover:text-slate-200 bg-slate-950/20 hover:bg-slate-950/40 transition-all cursor-pointer"
               >
                 <UserPlus className="w-4 h-4 text-emerald-400" />
-                افزودن کاربر فرضی جدید به چت
+                افزودن عضو فرضی جدید به چت
               </button>
 
               {showAddUser && (
-                <form onSubmit={handleAddSimulatedUser} className="mt-3 p-3 bg-slate-950/80 border border-slate-800 rounded-xl space-y-3">
-                  <div className="grid grid-cols-2 gap-2">
+                <form onSubmit={handleAddSimulatedUser} className="mt-3.5 p-4 bg-slate-950/80 border border-slate-800/80 rounded-xl space-y-3.5 shadow-lg">
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-[10px] text-slate-400 mb-1">نام کامل</label>
+                      <label className="block text-[10px] font-bold text-slate-400 mb-1">نام کامل عضو جدید</label>
                       <input
                         type="text"
                         value={newUserFirstName}
                         onChange={(e) => setNewUserFirstName(e.target.value)}
-                        placeholder="مثلا: احمد مرادی"
-                        className="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-slate-200 focus:outline-none"
+                        placeholder="مثلا: رضا علیزاده"
+                        className="w-full bg-slate-900 border border-slate-850 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500 transition-colors"
                         required
                       />
                     </div>
                     <div>
-                      <label className="block text-[10px] text-slate-400 mb-1">آیدی تلگرام (بدون @)</label>
+                      <label className="block text-[10px] font-bold text-slate-400 mb-1">آیدی تلگرام (بدون @)</label>
                       <input
                         type="text"
                         value={newUserUsername}
                         onChange={(e) => setNewUserUsername(e.target.value)}
-                        placeholder="ahmad_m"
-                        className="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-xs text-slate-200 focus:outline-none font-mono"
+                        placeholder="reza_ali"
+                        className="w-full bg-slate-900 border border-slate-850 rounded-lg p-2 text-xs text-slate-200 focus:outline-none font-mono"
                       />
                     </div>
                   </div>
                   <button
                     type="submit"
-                    className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs font-bold py-1.5 rounded transition-colors cursor-pointer"
+                    className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 active:scale-98 text-slate-950 text-xs font-black py-2 rounded-lg transition-all shadow-md shadow-emerald-500/10 cursor-pointer"
                   >
-                    ثبت کاربر فرضی جدید
+                    ثبت عضو فرضی جدید و ورود به چت
                   </button>
                 </form>
               )}
             </div>
 
             {/* Quick Messages */}
-            <div className="border-t border-slate-800 pt-3">
-              <span className="block text-xs font-medium text-slate-400 mb-2">پیام‌های آماده شبیه‌سازی:</span>
-              <div className="grid grid-cols-2 gap-2">
+            <div className="border-t border-slate-800 pt-4">
+              <span className="block text-xs font-bold text-slate-400 mb-3">شبیه‌ساز پیام‌های سریع و فرامین ربات:</span>
+              <div className="grid grid-cols-2 gap-2.5">
                 <button
-                  onClick={() => handleSendMessage(undefined, "سلام دوستان عزیز، چطورید؟")}
-                  className="bg-slate-900 hover:bg-slate-800/80 text-[11px] text-slate-300 py-2 px-2.5 rounded-lg border border-slate-800 transition-all text-right truncate cursor-pointer"
+                  onClick={() => handleSendMessage(undefined, "سلام هم‌رزمان عزیز، اوضاع چطوره؟")}
+                  className="bg-slate-950 hover:bg-slate-900 text-[11px] text-slate-300 py-2.5 px-3 rounded-xl border border-slate-800/80 hover:border-slate-700 transition-all text-right truncate cursor-pointer font-medium"
                 >
                   💬 سلام دوستان
                 </button>
                 <button
-                  onClick={() => handleSendMessage(undefined, "من کلی چت می‌کنم تا درجه‌ام بره بالا!")}
-                  className="bg-slate-900 hover:bg-slate-800/80 text-[11px] text-slate-300 py-2 px-2.5 rounded-lg border border-slate-800 transition-all text-right truncate cursor-pointer"
+                  onClick={() => handleSendMessage(undefined, "من در حال خدمت برای دریافت درجات بالاتر هستم!")}
+                  className="bg-slate-950 hover:bg-slate-900 text-[11px] text-slate-300 py-2.5 px-3 rounded-xl border border-slate-800/80 hover:border-slate-700 transition-all text-right truncate cursor-pointer font-medium"
                 >
-                  ✉️ ارسال پیام عادی (+۱ امتیاز)
+                  ✉️ ارسال چت عادی (+۱ امتیاز)
                 </button>
                 <button
                   onClick={() => handleSendMessage(undefined, "/رتبه")}
-                  className="bg-slate-900 hover:bg-slate-800/80 text-[11px] font-mono text-amber-400 py-2 px-2.5 rounded-lg border border-slate-800 transition-all text-right truncate cursor-pointer"
+                  className="bg-slate-950 hover:bg-slate-900 text-[11px] font-mono font-bold text-amber-400 py-2.5 px-3 rounded-xl border border-slate-800/80 hover:border-slate-700 transition-all text-right truncate cursor-pointer"
                 >
-                  🎖️ /رتبه (مقام شخصی)
+                  🎖️ /رتبه (مقام شخصی من)
                 </button>
                 <button
                   onClick={() => handleSendMessage(undefined, "/چارت")}
-                  className="bg-slate-900 hover:bg-slate-800/80 text-[11px] font-mono text-amber-400 py-2 px-2.5 rounded-lg border border-slate-800 transition-all text-right truncate cursor-pointer"
+                  className="bg-slate-950 hover:bg-slate-900 text-[11px] font-mono font-bold text-amber-400 py-2.5 px-3 rounded-xl border border-slate-800/80 hover:border-slate-700 transition-all text-right truncate cursor-pointer"
                 >
-                  🏆 /چارت (رده‌بندی گروه)
+                  🏆 /چارت (رده‌بندی کل)
                 </button>
                 <button
                   onClick={() => handleSendMessage(undefined, "/لیست_رتبه_ها")}
-                  className="bg-slate-900 hover:bg-slate-800/80 text-[11px] font-mono text-sky-400 py-2 px-2.5 rounded-lg border border-slate-800 transition-all text-right truncate cursor-pointer"
+                  className="bg-slate-950 hover:bg-slate-900 text-[11px] font-mono font-bold text-sky-400 py-2.5 px-3 rounded-xl border border-slate-800/80 hover:border-slate-700 transition-all text-right truncate cursor-pointer"
                 >
                   📜 /لیست_رتبه_ها
                 </button>
@@ -757,7 +786,7 @@ export default function ChatSimulator({ ranks, onSqlLog, sqlLogs, onClearLogs }:
                       handleSendMessage(undefined, "/addrank سپهبد جدید | 🎗️ | 200");
                     }
                   }}
-                  className="bg-slate-900 hover:bg-slate-800/80 text-[11px] text-rose-400 py-2 px-2.5 rounded-lg border border-slate-800 transition-all text-right truncate cursor-pointer"
+                  className="bg-slate-950 hover:bg-slate-900 text-[11px] font-bold text-rose-400 py-2.5 px-3 rounded-xl border border-slate-800/80 hover:border-slate-700 transition-all text-right truncate cursor-pointer"
                   title="ایجاد رتبه جدید توسط مالک"
                 >
                   ➕ /addrank (افزودن رتبه)
@@ -769,38 +798,46 @@ export default function ChatSimulator({ ranks, onSqlLog, sqlLogs, onClearLogs }:
         </div>
 
         {/* Console Log DB */}
-        <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 font-mono text-xs">
-          <div className="flex justify-between items-center mb-3">
-            <h4 className="text-slate-300 font-bold flex items-center gap-2">
-              <Database className="w-4 h-4 text-sky-400" />
+        <div className="bg-slate-900/80 backdrop-blur-md border border-slate-800 rounded-2xl p-5 shadow-xl shadow-slate-950/10">
+          <div className="flex justify-between items-center mb-3.5">
+            <h4 className="text-slate-100 font-black text-xs flex items-center gap-2">
+              <Database className="w-4 h-4 text-sky-400 animate-pulse" />
               کنسول تراکنش‌های دیتابیس Cloudflare D1
+              <span className="inline-flex items-center gap-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-1.5 py-0.5 rounded-md text-[8.5px] font-black">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                </span>
+                LIVE D1 SQL
+              </span>
             </h4>
             <button
               onClick={onClearLogs}
-              className="text-[10px] text-slate-500 hover:text-slate-300 underline cursor-pointer"
+              className="text-[10px] text-slate-500 hover:text-slate-300 underline font-semibold transition-colors cursor-pointer"
             >
-              پاکسازی
+              پاکسازی لاگ‌ها
             </button>
           </div>
 
-          <div className="bg-slate-900 rounded-xl p-3 max-h-[220px] overflow-y-auto space-y-2 text-left" dir="ltr">
+          <div className="bg-slate-950 rounded-xl p-3 max-h-[240px] overflow-y-auto space-y-2.5 text-left border border-slate-850" dir="ltr">
             {sqlLogs.length === 0 ? (
-              <span className="text-slate-600 block text-center py-4">در انتظار تراکنش جدید...</span>
+              <span className="text-slate-600 block text-center py-6 text-xs font-mono">Waiting for database queries...</span>
             ) : (
               sqlLogs.map(log => (
-                <div key={log.id} className="border-b border-slate-800/50 pb-1.5 last:border-b-0">
-                  <div className="flex justify-between text-[10px] mb-0.5">
-                    <span className={`font-bold ${
-                      log.type === 'select' ? 'text-blue-400' :
-                      log.type === 'update' ? 'text-yellow-500' :
-                      log.type === 'insert' ? 'text-emerald-400' : 'text-purple-400'
+                <div key={log.id} className="border-b border-slate-800/40 pb-2 last:border-b-0 space-y-1">
+                  <div className="flex justify-between items-center text-[9px] font-bold">
+                    <span className={`px-1.5 py-0.5 rounded text-[8.5px] ${
+                      log.type === 'select' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
+                      log.type === 'update' ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20' :
+                      log.type === 'insert' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 
+                      'bg-purple-500/10 text-purple-400 border border-purple-500/20'
                     }`}>
-                      [{log.type.toUpperCase()}]
+                      {log.type.toUpperCase()}
                     </span>
-                    <span className="text-slate-500">{log.timestamp}</span>
+                    <span className="text-slate-500 font-mono">{log.timestamp}</span>
                   </div>
-                  <div className="text-slate-300 break-words font-mono text-[11px] whitespace-pre-wrap">{log.query}</div>
-                  {log.params && <div className="text-[10px] text-slate-500 mt-0.5 font-mono">Params: {log.params}</div>}
+                  <div className="text-slate-300 break-all font-mono text-[10.5px] whitespace-pre-wrap leading-relaxed">{log.query}</div>
+                  {log.params && <div className="text-[10px] text-slate-500 font-mono">Params: {log.params}</div>}
                 </div>
               ))
             )}
@@ -811,108 +848,127 @@ export default function ChatSimulator({ ranks, onSqlLog, sqlLogs, onClearLogs }:
 
       {/* RIGHT: Mock Telegram Chat UI */}
       <div className="xl:col-span-7">
-        <div className="bg-slate-900 rounded-2xl border border-slate-700/60 overflow-hidden shadow-2xl flex flex-col h-[640px]">
+        <div className="bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden shadow-2xl flex flex-col h-[680px]">
           
           {/* Header */}
-          <div className="bg-slate-800/90 border-b border-slate-700/40 p-4 flex justify-between items-center">
+          <div className="bg-slate-900 border-b border-slate-850 p-4 flex justify-between items-center shadow-md">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center font-bold text-slate-900">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center font-black text-slate-950 shadow-md">
                 گ‌م
               </div>
               <div>
-                <h4 className="font-bold text-slate-100 text-sm">گروه هم‌رزمان نظامی (شبیه‌ساز)</h4>
-                <p className="text-xs text-emerald-400">ربات رتبه‌بندی در چت فعال است</p>
+                <h4 className="font-black text-slate-100 text-sm">گروه هم‌رزمان نظامی (شبیه‌ساز چت)</h4>
+                <p className="text-[11px] text-emerald-400 flex items-center gap-1.5">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                  </span>
+                  ربات رتبه‌بندی تلگرام روی کلادفلر فعال است
+                </p>
               </div>
             </div>
             
-            <div className="flex items-center gap-1.5 text-xs bg-slate-950/60 text-slate-400 py-1.5 px-3 rounded-lg border border-slate-800">
+            <div className="flex items-center gap-1.5 text-xs bg-slate-900 text-slate-400 py-1.5 px-3 rounded-xl border border-slate-800">
               <Users className="w-3.5 h-3.5 text-amber-500" />
-              <span>۵ عضو فرضی</span>
+              <span className="font-bold">{users.length} عضو فرضی</span>
             </div>
           </div>
 
           {/* Messages Board */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-[#0f172a] pattern-slate bg-cover bg-center">
+          <div className="flex-1 overflow-y-auto p-5 space-y-4 bg-gradient-to-b from-[#0f172a] via-[#090d16] to-[#030712] relative">
             
             {messages.map((m) => {
               const isSenderMe = m.user_id === selectedUserId;
               const isBot = m.is_bot;
 
-              return (
-                <div key={m.id} className={`flex flex-col ${isBot ? 'items-center' : 'items-start'}`}>
-                  
-                  {/* Replied to message indicator */}
-                  {m.reply_to_message_id && (
-                    <div className="text-[10px] text-slate-500 bg-slate-950/30 px-3 py-1 rounded-t-lg ml-6 border-l-2 border-amber-500/50">
-                      پاسخ به پیام قبلی
-                    </div>
-                  )}
+              if (isBot) {
+                return (
+                  <div key={m.id} className="flex justify-center my-4 text-center">
+                    <div className="max-w-[85%] bg-slate-900/70 backdrop-blur-md border border-slate-800/80 rounded-2xl p-4 shadow-lg">
+                      <p className="text-[11.5px] leading-relaxed text-slate-300 font-medium whitespace-pre-wrap break-words" dangerouslySetInnerHTML={{ __html: m.text }} />
+                      
+                      {/* Inline Keyboard Callback Buttons */}
+                      {m.inline_buttons && (
+                        <div className="mt-3.5 flex flex-wrap gap-2 justify-center max-w-md mx-auto">
+                          {m.inline_buttons.map((btn, bIdx) => {
+                            const parts = btn.callback_data.split('_'); // ["select", "rank", "rankId", "minMsgs", "userId"]
+                            const rId = parseInt(parts[2]);
+                            const minM = parseInt(parts[3]);
+                            const uId = parseInt(parts[4]);
 
-                  <div className={`max-w-[85%] rounded-2xl p-3 relative ${
-                    isBot 
-                      ? 'bg-slate-800/90 border border-slate-700/50 text-slate-200 text-xs w-[90%] my-1' 
-                      : 'bg-slate-900/95 border border-slate-800 text-slate-200'
-                  }`}>
-                    
-                    {/* Header info for sender */}
-                    {!isBot && (
-                      <div className="flex items-center justify-between gap-4 mb-1 pb-1 border-b border-slate-800/40">
+                            return (
+                              <button
+                                key={bIdx}
+                                onClick={() => handleCallbackClick(rId, minM, uId)}
+                                className="bg-slate-950 hover:bg-slate-900 text-amber-400 hover:text-amber-300 text-xs font-bold py-2 px-4 rounded-xl shadow-md border border-slate-800 hover:border-slate-700/80 transition-all cursor-pointer flex-1 min-w-[120px] text-center"
+                              >
+                                {btn.text}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+
+              // Normal User Message
+              return (
+                <div key={m.id} className={`flex gap-3 items-start max-w-[85%] ${isSenderMe ? 'mr-auto flex-row-reverse text-left' : 'ml-auto'}`}>
+                  {/* User Avatar Circle */}
+                  <div className={`w-8 h-8 rounded-full shrink-0 flex items-center justify-center font-bold text-[10px] shadow-md bg-gradient-to-tr ${getAvatarGradient(m.user_id)}`}>
+                    {getInitials(m.first_name)}
+                  </div>
+
+                  <div className="space-y-1">
+                    {/* Replied to message indicator */}
+                    {m.reply_to_message_id && (
+                      <div className={`text-[10px] text-slate-400 bg-slate-900/60 px-3 py-1 rounded-t-xl border-amber-500/50 inline-block ${isSenderMe ? 'border-r-2 mr-3' : 'border-l-2 ml-3'}`}>
+                        پاسخ به پیام قبلی
+                      </div>
+                    )}
+
+                    {/* Chat Bubble */}
+                    <div className={`rounded-2xl p-3.5 relative shadow-md bg-slate-900 border text-slate-200 text-right ${
+                      isSenderMe 
+                        ? 'border-amber-500/25 ring-1 ring-amber-500/10 bg-slate-900/100' 
+                        : 'border-slate-800'
+                    }`}>
+                      
+                      {/* Header info */}
+                      <div className="flex items-center justify-between gap-5 mb-2 pb-1.5 border-b border-slate-800/40">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-xs text-amber-400">{m.first_name}</span>
+                          <span className="font-extrabold text-xs text-amber-400">{m.first_name}</span>
                           {m.username && <span className="text-[10px] text-slate-500 font-mono">@{m.username}</span>}
                         </div>
                         
-                        {/* Member Tag (Simulating setChatMemberTag) */}
+                        {/* Member Tag */}
                         {m.tag && (
-                          <span className="text-[10px] font-bold bg-slate-950 text-slate-400 border border-slate-800 px-1.5 py-0.5 rounded">
+                          <span className="text-[10px] font-extrabold bg-slate-950 text-slate-400 border border-slate-850 px-2 py-0.5 rounded-md">
                             {m.tag}
                           </span>
                         )}
                       </div>
-                    )}
 
-                    {/* Content Text */}
-                    <p className="text-sm whitespace-pre-wrap leading-relaxed break-words" dangerouslySetInnerHTML={{ __html: m.text }} />
+                      {/* Message Content */}
+                      <p className="text-xs md:text-sm whitespace-pre-wrap leading-relaxed break-words font-medium text-slate-100" dangerouslySetInnerHTML={{ __html: m.text }} />
 
-                    {/* Inline Buttons (for choice levels) */}
-                    {m.inline_buttons && (
-                      <div className="mt-3 flex flex-wrap gap-2 justify-center">
-                        {m.inline_buttons.map((btn, bIdx) => {
-                          const parts = btn.callback_data.split('_'); // ["select", "rank", "rankId", "minMsgs", "userId"]
-                          const rId = parseInt(parts[2]);
-                          const minM = parseInt(parts[3]);
-                          const uId = parseInt(parts[4]);
-
-                          return (
-                            <button
-                              key={bIdx}
-                              onClick={() => handleCallbackClick(rId, minM, uId)}
-                              className="bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold py-1.5 px-3 rounded-lg shadow-sm transition-all cursor-pointer"
-                            >
-                              {btn.text}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {/* Footer - timestamp */}
-                    <div className="flex justify-between items-center text-[9px] text-slate-500 mt-2">
-                      <span>{new Date(m.timestamp).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}</span>
-                      
-                      {/* Action buttons (Reply as Admin / Normal reply) */}
-                      {!isBot && (
+                      {/* Footer Info */}
+                      <div className="flex justify-between items-center text-[9px] text-slate-500 mt-2.5 pt-1.5 border-t border-slate-800/30">
+                        <span className="font-mono">{new Date(m.timestamp).toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' })}</span>
+                        
                         <div className="flex items-center gap-2">
                           <button
                             onClick={() => setReplyToMsg(m)}
-                            className="text-[10px] text-amber-500/70 hover:text-amber-400 hover:underline cursor-pointer"
+                            className="text-[10px] text-amber-500/70 hover:text-amber-400 font-bold hover:underline transition-all cursor-pointer"
                           >
-                            ریپلای و پاسخ
+                            پاسخ دادن ↩️
                           </button>
                         </div>
-                      )}
-                    </div>
+                      </div>
 
+                    </div>
                   </div>
                 </div>
               );
@@ -920,34 +976,34 @@ export default function ChatSimulator({ ranks, onSqlLog, sqlLogs, onClearLogs }:
             <div ref={chatEndRef} />
           </div>
 
-          {/* Reply bar if any */}
+          {/* Reply Bar */}
           {replyToMsg && (
-            <div className="bg-slate-950 border-t border-slate-800 p-2 flex justify-between items-center text-xs">
+            <div className="bg-slate-950 border-t border-slate-800/60 p-3 flex justify-between items-center text-xs animate-fade-in shadow-inner">
               <span className="text-slate-400">
-                در حال پاسخ به پیام <strong>{replyToMsg.first_name}</strong>: "{replyToMsg.text.substring(0, 30)}..."
+                در حال پاسخ به پیام <strong>{replyToMsg.first_name}</strong>: <span className="italic text-slate-500">"{replyToMsg.text.substring(0, 40)}..."</span>
               </span>
               <button
                 onClick={() => setReplyToMsg(null)}
-                className="text-rose-400 hover:text-rose-300 font-bold underline cursor-pointer"
+                className="text-rose-400 hover:text-rose-300 font-bold underline transition-colors cursor-pointer text-[11px]"
               >
-                انصراف
+                انصراف و لغو
               </button>
             </div>
           )}
 
           {/* Typing Area */}
-          <form onSubmit={handleSendMessage} className="bg-slate-800 border-t border-slate-700/60 p-4 flex gap-3 items-center">
+          <form onSubmit={handleSendMessage} className="bg-slate-900 border-t border-slate-850 p-4 flex gap-3 items-center shadow-lg">
             
             {/* Quick Admin Action dropdown if replying */}
             {replyToMsg && users.find(u => u.user_id === selectedUserId)?.is_owner && (
-              <div className="flex gap-1">
+              <div className="flex gap-1.5">
                 <button
                   type="button"
                   onClick={() => {
                     promoteRankSim(replyToMsg.user_id, 'admin-promote');
                     setReplyToMsg(null);
                   }}
-                  className="bg-sky-500 hover:bg-sky-600 text-slate-950 text-[10px] font-bold px-2 py-1.5 rounded-lg shrink-0 transition-colors cursor-pointer"
+                  className="bg-sky-500 hover:bg-sky-600 text-slate-950 text-[10px] font-black px-2.5 py-2 rounded-xl shrink-0 transition-all shadow-md shadow-sky-500/10 cursor-pointer active:scale-95"
                   title="ارتقای رتبه کاربر ریپلای شده یک مرحله"
                 >
                   ⭐ ارتقاء
@@ -955,13 +1011,13 @@ export default function ChatSimulator({ ranks, onSqlLog, sqlLogs, onClearLogs }:
                 <button
                   type="button"
                   onClick={() => {
-                    addPointsSim(replyToMsg.user_id, 100, "دادن صد امتیاز", 'admin-pts');
+                    addPointsSim(replyToMsg.user_id, 100, "امتیاز اهدایی ادمین ارشد", 'admin-pts');
                     setReplyToMsg(null);
                   }}
-                  className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-[10px] font-bold px-2 py-1.5 rounded-lg shrink-0 transition-colors cursor-pointer"
-                  title="دادن ۱۰۰ امتیاز امتیاز"
+                  className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-[10px] font-black px-2.5 py-2 rounded-xl shrink-0 transition-all shadow-md shadow-emerald-500/10 cursor-pointer active:scale-95"
+                  title="اهدای ۱۰۰ امتیاز چت مستقیم به کاربر"
                 >
-                  +100
+                  +100 امتیاز
                 </button>
               </div>
             )}
@@ -970,13 +1026,13 @@ export default function ChatSimulator({ ranks, onSqlLog, sqlLogs, onClearLogs }:
               type="text"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
-              placeholder={replyToMsg ? "پاسخ ادمین (مثال: ارتقاء مقام یا دادن صد امتیاز)..." : "پیام خود را تایپ کنید..."}
-              className="flex-1 bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-slate-200 text-sm focus:outline-none focus:border-amber-500 transition-colors text-right"
+              placeholder={replyToMsg ? `پاسخ ادمین به ${replyToMsg.first_name} (مثال: ارتقاء یا چت)...` : "پیام خود را تایپ کنید..."}
+              className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-slate-200 text-xs md:text-sm focus:outline-none focus:border-amber-500 transition-colors text-right"
             />
             
             <button
               type="submit"
-              className="bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-slate-950 p-3 rounded-xl transition-all cursor-pointer shrink-0"
+              className="bg-amber-500 hover:bg-amber-600 active:bg-amber-700 text-slate-950 p-3 rounded-xl transition-all cursor-pointer shrink-0 shadow-md shadow-amber-500/10 active:scale-95"
             >
               <Send className="w-5 h-5 shrink-0 transform -rotate-180" />
             </button>
