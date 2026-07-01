@@ -1,0 +1,6 @@
+{
+  "name": "Telegram Rank Bot Creator",
+  "description": "ساخت، شبیه‌سازی و تولید کد کامل ربات تلگرام رتبه‌بندی نظامی برای Cloudflare Workers و دیتابیس D1",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
