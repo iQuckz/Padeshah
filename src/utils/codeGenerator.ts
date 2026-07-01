@@ -68,10 +68,102 @@ const PERSISTENT_KEYBOARD = {
 
 const lastMessages = new Map(); // ضداسپم پیام‌های مکرر
 
+let schemaMigrated = false;
+
+async function runMigrations(env) {
+  if (schemaMigrated) return;
+  try {
+    // 1. Create tables if they do not exist
+    await env.DB.prepare(\`
+      CREATE TABLE IF NOT EXISTS settings (
+        chat_id INTEGER PRIMARY KEY,
+        owner_id INTEGER,
+        chat_title TEXT,
+        congrats_mode TEXT DEFAULT 'direct',
+        is_active INTEGER DEFAULT 1
+      )
+    \`).run();
+
+    await env.DB.prepare(\`
+      CREATE TABLE IF NOT EXISTS ranks (
+        chat_id INTEGER,
+        id INTEGER,
+        title TEXT,
+        emoji TEXT,
+        min_messages INTEGER,
+        sort_order INTEGER,
+        group_choice_key TEXT,
+        PRIMARY KEY (chat_id, id)
+      )
+    \`).run();
+
+    await env.DB.prepare(\`
+      CREATE TABLE IF NOT EXISTS users (
+        chat_id INTEGER,
+        user_id INTEGER,
+        first_name TEXT,
+        username TEXT,
+        message_count INTEGER DEFAULT 0,
+        weekly_message_count INTEGER DEFAULT 0,
+        weekly_reset_at INTEGER DEFAULT 0,
+        current_rank_id INTEGER,
+        last_message_at INTEGER,
+        is_active INTEGER DEFAULT 1,
+        PRIMARY KEY (chat_id, user_id)
+      )
+    \`).run();
+
+    // 2. Perform incremental ALTER TABLE for older databases
+    // Check settings table columns
+    const settingsInfo = await env.DB.prepare("PRAGMA table_info(settings)").all();
+    if (settingsInfo.results) {
+      const columns = settingsInfo.results.map(r => r.name);
+      if (!columns.includes("chat_title")) {
+        try { await env.DB.prepare("ALTER TABLE settings ADD COLUMN chat_title TEXT").run(); } catch (e) {}
+      }
+      if (!columns.includes("congrats_mode")) {
+        try { await env.DB.prepare("ALTER TABLE settings ADD COLUMN congrats_mode TEXT DEFAULT 'direct'").run(); } catch (e) {}
+      }
+      if (!columns.includes("is_active")) {
+        try { await env.DB.prepare("ALTER TABLE settings ADD COLUMN is_active INTEGER DEFAULT 1").run(); } catch (e) {}
+      }
+    }
+
+    // Check ranks table columns
+    const ranksInfo = await env.DB.prepare("PRAGMA table_info(ranks)").all();
+    if (ranksInfo.results) {
+      const columns = ranksInfo.results.map(r => r.name);
+      if (!columns.includes("group_choice_key")) {
+        try { await env.DB.prepare("ALTER TABLE ranks ADD COLUMN group_choice_key TEXT").run(); } catch (e) {}
+      }
+    }
+
+    // Check users table columns
+    const usersInfo = await env.DB.prepare("PRAGMA table_info(users)").all();
+    if (usersInfo.results) {
+      const columns = usersInfo.results.map(r => r.name);
+      if (!columns.includes("weekly_message_count")) {
+        try { await env.DB.prepare("ALTER TABLE users ADD COLUMN weekly_message_count INTEGER DEFAULT 0").run(); } catch (e) {}
+      }
+      if (!columns.includes("weekly_reset_at")) {
+        try { await env.DB.prepare("ALTER TABLE users ADD COLUMN weekly_reset_at INTEGER DEFAULT 0").run(); } catch (e) {}
+      }
+      if (!columns.includes("is_active")) {
+        try { await env.DB.prepare("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1").run(); } catch (e) {}
+      }
+    }
+
+    schemaMigrated = true;
+  } catch (err) {
+    console.error("Migration error:", err);
+  }
+}
+
 export default {
   async fetch(request, env) {
     if (request.method !== "POST") return new Response("POST only", { status: 405 });
     try {
+      await runMigrations(env);
       const update = await request.json();
       if (update.callback_query) return await handleCallbackQuery(update.callback_query, env);
       if (update.message) return await handleMessage(update.message, env);
