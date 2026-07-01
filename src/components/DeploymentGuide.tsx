@@ -327,6 +327,26 @@ export default function DeploymentGuide({ onGoToTab }: DeploymentGuideProps) {
             پلن‌های رایگان کلودفلر و سیستم Quick Edit به شما اجازه می‌دهند بدون نیاز به نصب npm، نصب Node.js روی سیستم، یا درگیری با خطوط فرمان ترمینال، کدهای جاوااسکریپت خود را بنویسید و متصل به دیتابیس D1 مستقر کنید.
           </p>
           
+          <div className="bg-rose-500/10 p-3.5 rounded-lg border border-rose-500/20 space-y-2 leading-relaxed">
+            <strong className="text-rose-400 flex items-center gap-1">
+              🚨 چرا ربات کار نمی‌کند؟ (رفع مشکل):
+            </strong>
+            <ul className="space-y-1.5 list-disc list-inside text-slate-300">
+              <li>
+                <span className="font-bold text-amber-400">تست در گروه (نه پیوی):</span> این ربات فقط پیام‌های گروه تعریف شده را پردازش می‌کند و پیام‌های شخصی (PV) را کاملاً نادیده می‌گیرد.
+              </li>
+              <li>
+                <span className="font-bold text-amber-400">غیرفعال کردن Privacy Mode:</span> به طور پیش‌فرض ربات‌ها پیام‌های معمولی گروه را نمی‌بینند. حتماً به <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="text-sky-400 underline">@BotFather</a> پیام داده و از بخش <code className="bg-slate-900 px-1 py-0.5 rounded text-rose-300 font-mono">Bot Settings &gt; Group Privacy</code> آن را <span className="text-rose-400 font-bold">Turn off</span> کنید.
+              </li>
+              <li>
+                <span className="font-bold text-amber-400">ادمین کردن ربات:</span> مطمئن شوید ربات در گروه ادمین است و دسترسی مدیریت تگ‌ها را دارد.
+              </li>
+              <li>
+                <span className="font-bold text-amber-400">فرمت شناسه CHAT_ID:</span> آیدی گروه‌ها در تلگرام حتماً باید منفی باشد و معمولاً با <code className="font-mono bg-slate-900 px-1 rounded text-emerald-400">-100</code> شروع می‌شود (مثال: <code className="font-mono bg-slate-900 px-1 rounded text-emerald-400">-100123456789</code>).
+              </li>
+            </ul>
+          </div>
+
           <div className="bg-slate-900/40 p-3.5 rounded-lg border border-slate-850 space-y-1 leading-relaxed">
             <strong className="text-slate-300">💡 نکات دیپلوی عالی:</strong>
             <p>

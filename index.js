@@ -232,9 +232,10 @@ async function handleMessage(message, env) {
   const expectedChatId = parseInt(env.CHAT_ID);
   const ownerId = parseInt(env.OWNER_ID);
   const chatId = message.chat.id;
+  const isPrivate = message.chat.type === "private";
 
-  // ربات فقط پیام‌های گروه تعیین‌شده را پردازش می‌کند
-  if (chatId !== expectedChatId) {
+  // ربات فقط پیام‌های گروه تعیین‌شده یا چت خصوصی (پیوی) را پردازش می‌کند
+  if (!isPrivate && chatId !== expectedChatId) {
     return new Response("OK", { status: 200 });
   }
 
@@ -242,6 +243,35 @@ async function handleMessage(message, env) {
   const firstName = message.from.first_name || "کاربر ناشناس";
   const username = message.from.username || "";
   const text = message.text || "";
+
+  // پاسخ مناسب به پیام‌های خصوصی (PV)
+  if (isPrivate) {
+    if (text.startsWith("/")) {
+      const command = text.split(" ")[0].split("@")[0].toLowerCase();
+      
+      if (command === "/start") {
+        const welcomePV = `👋 <b>درود بر شما ${firstName} عزیز!</b>\n\nمن ربات رتبه‌بندی اعضای گروه هستم.\n\n⚠️ <b>توجه مهم:</b> سیستم شمارش پیام‌ها و ارتقای رتبه فقط در داخل گروه فعال است و پیام‌های شما در پیوی شمرده نمی‌شود.\n\nاما در اینجا می‌توانید از دستورات زیر استفاده کنید:\n👑 /rank یا /رتبه - مشاهده رتبه و تعداد پیام‌های شما در گروه\n📊 /ranks یا /لیست_رتبه_ها - مشاهده لیست تمام درجات نظامی\n📈 /chart یا /چارت - مشاهده جدول نفرات برتر گروه`;
+        await sendMessage(botToken, chatId, welcomePV, message.message_id);
+        return new Response("OK", { status: 200 });
+      }
+      
+      if (command === "/rank" || command === "/رتبه") {
+        return await handleRankCommand(botToken, chatId, userId, firstName, message.message_id, env);
+      }
+      
+      if (command === "/chart" || command === "/چارت") {
+        return await handleChartCommand(botToken, chatId, firstName, message.message_id, env);
+      }
+
+      if (command === "/ranks" || command === "/لیست_رتبه_ها") {
+        return await handleRanksListCommand(botToken, chatId, message.message_id);
+      }
+    } else {
+      const defaultPV = `👋 <b>درود بر شما ${firstName}!</b>\n\nمن ربات رتبه‌بندی گروه هستم. لطفاً برای ارتقای درجه و ثبت پیام‌ها، در گروه تعیین‌شده چت کنید.\n\n🤖 <b>دستورات قابل استفاده در پیوی:</b>\n👑 /rank - مشاهده رتبه شما\n📊 /ranks - لیست کل درجات گروه\n📈 /chart - جدول برترین‌ها`;
+      await sendMessage(botToken, chatId, defaultPV, message.message_id);
+    }
+    return new Response("OK", { status: 200 });
+  }
 
   // ۱. بررسی ادمین/مالک بودن فرستنده جهت دستورات ریپلای مدیریتی
   const isMsgOwner = userId === ownerId;
