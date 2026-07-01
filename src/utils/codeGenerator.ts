@@ -133,6 +133,9 @@ async function runMigrations(env) {
     const ranksInfo = await env.DB.prepare("PRAGMA table_info(ranks)").all();
     if (ranksInfo.results) {
       const columns = ranksInfo.results.map(r => r.name);
+      if (!columns.includes("chat_id")) {
+        try { await env.DB.prepare("ALTER TABLE ranks ADD COLUMN chat_id INTEGER DEFAULT 0").run(); } catch (e) {}
+      }
       if (!columns.includes("group_choice_key")) {
         try { await env.DB.prepare("ALTER TABLE ranks ADD COLUMN group_choice_key TEXT").run(); } catch (e) {}
       }
@@ -142,6 +145,9 @@ async function runMigrations(env) {
     const usersInfo = await env.DB.prepare("PRAGMA table_info(users)").all();
     if (usersInfo.results) {
       const columns = usersInfo.results.map(r => r.name);
+      if (!columns.includes("chat_id")) {
+        try { await env.DB.prepare("ALTER TABLE users ADD COLUMN chat_id INTEGER DEFAULT 0").run(); } catch (e) {}
+      }
       if (!columns.includes("weekly_message_count")) {
         try { await env.DB.prepare("ALTER TABLE users ADD COLUMN weekly_message_count INTEGER DEFAULT 0").run(); } catch (e) {}
       }
@@ -151,6 +157,17 @@ async function runMigrations(env) {
       if (!columns.includes("is_active")) {
         try { await env.DB.prepare("ALTER TABLE users ADD COLUMN is_active INTEGER DEFAULT 1").run(); } catch (e) {}
       }
+    }
+
+    // 3. Post-alter migration of old data to support multi-tenant if needed
+    try {
+      const firstSetting = await env.DB.prepare("SELECT chat_id FROM settings LIMIT 1").first();
+      if (firstSetting && firstSetting.chat_id) {
+        await env.DB.prepare("UPDATE users SET chat_id = ? WHERE chat_id = 0 OR chat_id IS NULL").bind(firstSetting.chat_id).run();
+        await env.DB.prepare("UPDATE ranks SET chat_id = ? WHERE chat_id = 0 OR chat_id IS NULL").bind(firstSetting.chat_id).run();
+      }
+    } catch (e) {
+      console.error("Data migration error:", e);
     }
 
     schemaMigrated = true;
