@@ -56,6 +56,14 @@ export function generateWorkerCode(ranks: Rank[]): string {
 
 const RANKS = ${ranksJson};
 
+const PERSISTENT_KEYBOARD = {
+  keyboard: [
+    [{ text: "🎖️ رتبه نظامی من" }, { text: "🏆 جدول برترین‌ها (چارت)" }],
+    [{ text: "📜 هرم درجات نظامی" }, { text: "⚙️ راهنما و پشتیبانی" }]
+  ],
+  resize_keyboard: true
+};
+
 export default {
   async fetch(request, env, ctx) {
     if (request.method !== "POST") {
@@ -96,24 +104,32 @@ function cleanTagForTelegram(text) {
 }
 
 /**
- * متد کمکی برای ارسال پیام به تلگرام
+ * متد کمکی برای ارسال یا ویرایش پیام در تلگرام
  */
-async function sendMessage(botToken, chatId, text, replyToId = null, inlineButtons = null) {
-  const url = \`https://api.telegram.org/bot\${botToken}/sendMessage\`;
+async function sendOrEditMessage(botToken, chatId, text, replyToId = null, replyMarkup = null, isEdit = false, messageId = null) {
+  let url;
   const body = {
     chat_id: chatId,
     text: text,
     parse_mode: "HTML"
   };
 
-  if (replyToId) {
-    body.reply_to_message_id = replyToId;
+  if (isEdit && messageId) {
+    url = \`https://api.telegram.org/bot\${botToken}/editMessageText\`;
+    body.message_id = messageId;
+  } else {
+    url = \`https://api.telegram.org/bot\${botToken}/sendMessage\`;
+    if (replyToId) {
+      body.reply_to_message_id = replyToId;
+    }
   }
 
-  if (inlineButtons) {
-    body.reply_markup = {
-      inline_keyboard: inlineButtons
-    };
+  if (replyMarkup) {
+    if (Array.isArray(replyMarkup)) {
+      body.reply_markup = { inline_keyboard: replyMarkup };
+    } else {
+      body.reply_markup = replyMarkup;
+    }
   }
 
   const res = await fetch(url, {
@@ -122,6 +138,13 @@ async function sendMessage(botToken, chatId, text, replyToId = null, inlineButto
     body: JSON.stringify(body)
   });
   return await res.json();
+}
+
+/**
+ * متد کمکی برای ارسال پیام به تلگرام
+ */
+async function sendMessage(botToken, chatId, text, replyToId = null, inlineButtons = null) {
+  return await sendOrEditMessage(botToken, chatId, text, replyToId, inlineButtons, false);
 }
 
 /**
@@ -146,7 +169,7 @@ async function setChatMemberTag(botToken, chatId, userId, tag) {
 }
 
 /**
- * مدیریت دکمه‌های شیشه‌ای انتخاب رتبه هم‌سطح
+ * مدیریت دکمه‌های شیشه‌ای انتخاب رتبه هم‌سطح و ناوبری‌های سریع منو
  */
 async function handleCallbackQuery(callbackQuery, env) {
   const botToken = env.BOT_TOKEN;
@@ -154,6 +177,7 @@ async function handleCallbackQuery(callbackQuery, env) {
   const callbackQueryId = callbackQuery.id;
   const clickerId = callbackQuery.from.id;
   const clickerName = callbackQuery.from.first_name;
+  const messageId = callbackQuery.message ? callbackQuery.message.message_id : null;
   const data = callbackQuery.data; // مثلاً select_rank_5_1000
 
   // پاسخ اولیه برای بستن حالت لودینگ دکمه در تلگرام
@@ -162,6 +186,23 @@ async function handleCallbackQuery(callbackQuery, env) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ callback_query_id: callbackQueryId })
   });
+
+  // ناوبری‌های سریع شیشه‌ای
+  if (data === "show_chart_click") {
+    return await handleChartCommand(botToken, chatId, clickerName, messageId, env, null, true);
+  }
+
+  if (data === "show_ranks_click") {
+    return await handleRanksListCommand(botToken, chatId, messageId, null, true);
+  }
+
+  if (data === "show_my_rank_click") {
+    return await handleRankCommand(botToken, chatId, clickerId, clickerName, messageId, env, null, true);
+  }
+
+  if (data === "show_help_click") {
+    return await handleHelpCommand(botToken, chatId, messageId, true);
+  }
 
   if (!data.startsWith("select_rank_")) {
     return new Response("OK", { status: 200 });
@@ -217,7 +258,7 @@ async function handleCallbackQuery(callbackQuery, env) {
 }
 
 /**
- * پردازش پیام‌های دریافتی گروه
+ * پردازش پیام‌های دریافتی گروه و پیوی خصوصی
  */
 async function handleMessage(message, env) {
   const botToken = env.BOT_TOKEN;
@@ -236,31 +277,42 @@ async function handleMessage(message, env) {
   const username = message.from.username || "";
   const text = message.text || "";
 
+  // تبدیل دکمه‌های کیبورد یا کلمات کلیدی فارسی به دستورات معادل جهت کاربری آسان و گرافیکی
+  let processedText = text.trim();
+  if (processedText === "🎖️ رتبه نظامی من" || processedText === "رتبه من" || processedText === "رتبه") {
+    processedText = "/rank";
+  } else if (processedText === "🏆 جدول برترین‌ها (چارت)" || processedText === "چارت" || processedText === "جدول" || processedText === "برترین‌ها") {
+    processedText = "/chart";
+  } else if (processedText === "📜 هرم درجات نظامی" || processedText === "درجات" || processedText === "لیست درجات" || processedText === "رتبه‌ها") {
+    processedText = "/ranks";
+  } else if (processedText === "⚙️ راهنما و پشتیبانی" || processedText === "راهنما") {
+    processedText = "/help";
+  }
+
   // پاسخ مناسب به پیام‌های خصوصی (PV)
   if (isPrivate) {
-    if (text.startsWith("/")) {
-      const command = text.split(" ")[0].split("@")[0].toLowerCase();
+    if (processedText.startsWith("/")) {
+      const command = processedText.split(" ")[0].split("@")[0].toLowerCase();
       
-      if (command === "/start") {
-        const welcomePV = \`👋 <b>درود بر شما \${firstName} عزیز!</b>\\n\\nمن ربات رتبه‌بندی اعضای گروه هستم.\\n\\n⚠️ <b>توجه مهم:</b> سیستم شمارش پیام‌ها و ارتقای رتبه فقط در داخل گروه فعال است و پیام‌های شما در پیوی شمرده نمی‌شود.\\n\\nاما در اینجا می‌توانید از دستورات زیر استفاده کنید:\\n👑 /rank یا /رتبه - مشاهده رتبه و تعداد پیام‌های شما در گروه\\n📊 /ranks یا /لیست_رتبه_ها - مشاهده لیست تمام درجات نظامی\\n📈 /chart یا /چارت - مشاهده جدول نفرات برتر گروه\`;
-        await sendMessage(botToken, chatId, welcomePV, message.message_id);
+      if (command === "/start" || command === "/help") {
+        await handleHelpCommand(botToken, chatId, message.message_id, false);
         return new Response("OK", { status: 200 });
       }
       
       if (command === "/rank" || command === "/رتبه") {
-        return await handleRankCommand(botToken, chatId, userId, firstName, message.message_id, env);
+        return await handleRankCommand(botToken, chatId, userId, firstName, message.message_id, env, PERSISTENT_KEYBOARD);
       }
       
       if (command === "/chart" || command === "/چارت") {
-        return await handleChartCommand(botToken, chatId, firstName, message.message_id, env);
+        return await handleChartCommand(botToken, chatId, firstName, message.message_id, env, PERSISTENT_KEYBOARD);
       }
 
       if (command === "/ranks" || command === "/لیست_رتبه_ها") {
-        return await handleRanksListCommand(botToken, chatId, message.message_id);
+        return await handleRanksListCommand(botToken, chatId, message.message_id, PERSISTENT_KEYBOARD);
       }
     } else {
-      const defaultPV = \`👋 <b>درود بر شما \${firstName}!</b>\\n\\nمن ربات رتبه‌بندی گروه هستم. لطفاً برای ارتقای درجه و ثبت پیام‌ها، در گروه تعیین‌شده چت کنید.\\n\\n🤖 <b>دستورات قابل استفاده در پیوی:</b>\\n👑 /rank - مشاهده رتبه شما\\n📊 /ranks - لیست کل درجات گروه\\n📈 /chart - جدول برترین‌ها\`;
-      await sendMessage(botToken, chatId, defaultPV, message.message_id);
+      // ارسال راهنما به همراه کیبورد دکمه‌ای ثابت در صورت تایپ هر چیز متفرقه‌ای در پیوی
+      await handleHelpCommand(botToken, chatId, message.message_id, false);
     }
     return new Response("OK", { status: 200 });
   }
@@ -277,23 +329,23 @@ async function handleMessage(message, env) {
 
     // فقط مالک یا خالق گروه حق اجرای دستورات مدیریتی را دارد
     if (isMsgOwner || await checkSenderIsCreator(botToken, chatId, userId)) {
-      if (text === "ارتقاء مقام") {
+      if (processedText === "ارتقاء مقام") {
         return await handleAdminPromote(botToken, chatId, targetUserId, targetFirstName, env);
       }
       
-      if (text === "دادن صد امتیاز") {
+      if (processedText === "دادن صد امتیاز") {
         return await handleAdminAddPoints(botToken, chatId, targetUserId, targetFirstName, targetUsername, 100, env);
       }
 
       // دادن [عدد] امتیاز
-      const giveMatch = text.match(/^دادن\\s+(\\d+)\\s+امتیاز$/);
+      const giveMatch = processedText.match(/^دادن\\s+(\\d+)\\s+امتیاز$/);
       if (giveMatch) {
         const points = parseInt(giveMatch[1]);
         return await handleAdminAddPoints(botToken, chatId, targetUserId, targetFirstName, targetUsername, points, env);
       }
 
       // کاهش [عدد] امتیاز
-      const takeMatch = text.match(/^کاهش\\s+(\\d+)\\s+امتیاز$/);
+      const takeMatch = processedText.match(/^کاهش\\s+(\\d+)\\s+امتیاز$/);
       if (takeMatch) {
         const points = parseInt(takeMatch[1]);
         return await handleAdminAddPoints(botToken, chatId, targetUserId, targetFirstName, targetUsername, -points, env);
@@ -301,7 +353,7 @@ async function handleMessage(message, env) {
     } else {
       // پیام خطای عدم دسترسی برای کاربر غیر ادمین در پاسخ به تلاش برای مدیریت
       const adminKeywords = ["ارتقاء مقام", "دادن صد امتیاز", "امتیاز"];
-      if (adminKeywords.some(kw => text.includes(kw))) {
+      if (adminKeywords.some(kw => processedText.includes(kw))) {
         await sendMessage(
           botToken,
           chatId,
@@ -314,8 +366,8 @@ async function handleMessage(message, env) {
   }
 
   // ۲. هندل کردن فرمان‌های متنی ربات (دستوراتی که با / شروع می‌شوند)
-  if (text.startsWith("/")) {
-    const command = text.split(" ")[0].split("@")[0].toLowerCase();
+  if (processedText.startsWith("/")) {
+    const command = processedText.split(" ")[0].split("@")[0].toLowerCase();
     
     if (command === "/rank" || command === "/رتبه") {
       return await handleRankCommand(botToken, chatId, userId, firstName, message.message_id, env);
@@ -329,8 +381,12 @@ async function handleMessage(message, env) {
       return await handleRanksListCommand(botToken, chatId, message.message_id);
     }
 
+    if (command === "/help") {
+      return await handleHelpCommand(botToken, chatId, message.message_id, false);
+    }
+
     if (command === "/addrank" && (isMsgOwner || await checkSenderIsCreator(botToken, chatId, userId))) {
-      return await handleAddRankCommand(botToken, chatId, text, message.message_id, env);
+      return await handleAddRankCommand(botToken, chatId, processedText, message.message_id, env);
     }
 
     return new Response("OK", { status: 200 });
@@ -385,7 +441,7 @@ async function handleMessage(message, env) {
     }
 
     // ارسال پیام خوش‌آمدگویی به همراه دکمه شیشه‌ای چارت
-    const welcomeText = \`👋 <b>درود بر شما، \${firstName} عزیز!</b>\\n\\n🎖️ نقش شما: <b>\${initialRank ? initialRank.title : "بدون رتبه"}</b>\\n✉️ تعداد پیام‌ها: <b>1</b>\\n📈 پیام لازم برای ارتقا: <b>\u200e\${RANKS[1] ? RANKS[1].min_messages : "بینهایت"} پیام</b>\`;
+    const welcomeText = \`👋 <b>درود بر شما، \${firstName} عزیز!</b>\\n\\n🎖️ نقش شما: <b>\${initialRank ? initialRank.title : "بدون رتبه"}</b>\\n✉️ تعداد پیام‌ها: <b>1</b>\\n📈 پیام لازم برای ارتقا: <b>\\u200e\${RANKS[1] ? RANKS[1].min_messages : "بینهایت"} پیام</b>\`;
     const buttons = [
       [{ text: "📊 مشاهده چارت مقامات", callback_data: "show_chart_click" }]
     ];
@@ -434,7 +490,7 @@ async function checkAndTriggerLevelUp(botToken, chatId, userId, firstName, curre
     // ارسال پیغام با دکمه‌های اینلاین برای انتخاب بین گزینه‌های هم‌سطح
     const buttons = [
       topEligibleRanks.map(r => ({
-        text: \`\${r.emoji} \${r.title}\`,
+        text: \`\${r.emoji} \&apos;\${r.title}\&apos;\`,
         callback_data: \`select_rank_\${r.id}_\${r.min_messages}\`
       }))
     ];
@@ -468,18 +524,36 @@ async function checkAndTriggerLevelUp(botToken, chatId, userId, firstName, curre
 /**
  * نمایش رتبه شخصی (/rank)
  */
-async function handleRankCommand(botToken, chatId, userId, firstName, messageId, env) {
+async function handleRankCommand(botToken, chatId, userId, firstName, messageId, env, replyMarkupOverride = null, isEdit = false) {
   const dbUser = await env.DB.prepare("SELECT * FROM users WHERE user_id = ?").bind(userId).first();
 
   if (userId === parseInt(env.OWNER_ID)) {
-    const ownerText = \`👑 <b>مقام سلطنتی شاهنشاه</b>\\n\\n👤 نام: <b>\${firstName}</b>\\n🎖️ رتبه دائمی: <b>شاهنشاه</b>\\n🔱 شما جایگاه جاودان بالای هرم نظامی را دارا هستید و نیازی به ارزیابی ندارید.\`;
-    await sendMessage(botToken, chatId, ownerText, messageId);
+    const ownerText = \`👑 <b>| مقام سلطنتی شاهنشاه اعظم</b>\\n\` +
+                      \`━━━━━━━━━━━━━━━━━━\\n\` +
+                      \`👤 <b>نام فرمانروا:</b> <code>\${firstName}</code>\\n\` +
+                      \`🎖️ <b>درجه دائمی:</b> <code>شاهنشاه</code>\\n\\n\` +
+                      \`🔱 شما جایگاه جاودان و ابدی بالای هرم نظامی را دارا هستید و نیازی به ارزیابی درجه ندارید.\`;
+    
+    const buttons = [
+      [
+        { text: "📊 جدول برترین‌ها (چارت)", callback_data: "show_chart_click" },
+        { text: "📜 لیست درجات نظامی", callback_data: "show_ranks_click" }
+      ]
+    ];
+    
+    await sendOrEditMessage(botToken, chatId, ownerText, messageId, replyMarkupOverride || buttons, isEdit, messageId);
     return new Response("OK", { status: 200 });
   }
 
   if (!dbUser) {
-    const text = \`🚫 <b>\${firstName}</b>، شما هنوز در سیستم رتبه‌بندی ثبت نشده‌اید. پس از ارسال اولین پیام عادی، رتبه شما فعال خواهد شد.\`;
-    await sendMessage(botToken, chatId, text, messageId);
+    const text = \`🚫 <b>درود رزمنده!</b>\\n\\n<b>\${firstName}</b>، شما هنوز در سیستم رتبه‌بندی گروه ثبت نشده‌اید.\\n\\n✉️ پس از ارسال اولین پیام عادی خود در گروه، پرونده نظامی شما فعال و محاسبات درجه آغاز خواهد شد!\`;
+    const buttons = [
+      [
+        { text: "📊 جدول برترین‌ها (چارت)", callback_data: "show_chart_click" },
+        { text: "📜 لیست درجات نظامی", callback_data: "show_ranks_click" }
+      ]
+    ];
+    await sendOrEditMessage(botToken, chatId, text, messageId, replyMarkupOverride || buttons, isEdit, messageId);
     return new Response("OK", { status: 200 });
   }
 
@@ -490,21 +564,47 @@ async function handleRankCommand(botToken, chatId, userId, firstName, messageId,
   if (nextRanks.length > 0) {
     const nextRank = nextRanks[0];
     const remaining = nextRank.min_messages - dbUser.message_count;
-    nextRankText = \`📈 مانده تا رتبه بعدی (\${nextRank.emoji} \${nextRank.title}): <b>\${remaining} پیام</b>\`;
+    const totalForNext = nextRank.min_messages - (currentRank ? currentRank.min_messages : 0);
+    const completedForNext = dbUser.message_count - (currentRank ? currentRank.min_messages : 0);
+    const percentage = Math.min(100, Math.max(0, Math.round((completedForNext / (totalForNext || 1)) * 100)));
+    
+    const filledBlocks = Math.round(percentage / 10);
+    const progressBar = "■".repeat(filledBlocks) + "□".repeat(10 - filledBlocks);
+
+    nextRankText = \`📈 <b>در آستانه ارتقا به درجه بعدی:</b>\\n\` +
+                   \`↳ \${nextRank.emoji} <b>\${nextRank.title}</b>\\n\` +
+                   \`📊 <b>میزان پیشرفت:</b> <code>[\${progressBar}] \${percentage}%</code>\\n\` +
+                   \`✉️ <b>پیام‌های باقیمانده:</b> <code>\${remaining}</code> پیام دیگر\`;
   } else {
-    nextRankText = \`🔥 شما به نهایت درجات و اوج قله نظامی رسیده‌اید!\`;
+    nextRankText = \`🔥 <b>تبریک شایسته! شما در راس هرم نظامی و قله افتخار گروه قرار دارید!</b>\`;
   }
 
-  const rankText = \`🪖 <b>اطلاعات نظامی شما:</b>\\n\\n👤 نام: <b>\${firstName}</b>\\n🎖️ رتبه فعلی: <b>\${currentRank ? currentRank.emoji : ""} \${currentRank ? currentRank.title : "سرباز نوپای بدون رتبه"}</b>\\n✉️ تعداد پیام‌ها: <b>\${dbUser.message_count}</b>\\n\${nextRankText}\`;
+  const rankText = \`🪖 <b>| پرونده نظامی و اطلاعات رزمنده</b>\\n\` +
+                   \`━━━━━━━━━━━━━━━━━━\\n\` +
+                   \`👤 <b>نام کاربر:</b> <code>\${firstName}</code>\\n\` +
+                   \`🏅 <b>درجه فعلی:</b> <b>\${currentRank ? currentRank.emoji : "🎖️"} \${currentRank ? currentRank.title : "سرباز نوپا"}</b>\\n\` +
+                   \`✉️ <b>تعداد پیام‌های ثبت‌شده:</b> <code>\${dbUser.message_count}</code> پیام\\n\` +
+                   \`━━━━━━━━━━━━━━━━━━\\n\` +
+                   \`\${nextRankText}\`;
   
-  await sendMessage(botToken, chatId, rankText, messageId);
+  const buttons = [
+    [
+      { text: "📊 جدول برترین‌ها (چارت)", callback_data: "show_chart_click" },
+      { text: "📜 لیست درجات نظامی", callback_data: "show_ranks_click" }
+    ],
+    [
+      { text: "⚙️ راهنمای جامع", callback_data: "show_help_click" }
+    ]
+  ];
+  
+  await sendOrEditMessage(botToken, chatId, rankText, messageId, replyMarkupOverride || buttons, isEdit, messageId);
   return new Response("OK", { status: 200 });
 }
 
 /**
  * نمایش چارت رتبه‌بندی (/chart)
  */
-async function handleChartCommand(botToken, chatId, firstName, messageId, env) {
+async function handleChartCommand(botToken, chatId, firstName, messageId, env, replyMarkupOverride = null, isEdit = false) {
   // گرفتن ۱۵ نفر اول بر اساس تعداد پیام
   const topUsers = await env.DB.prepare(
     "SELECT * FROM users WHERE user_id != ? ORDER BY message_count DESC LIMIT 15"
@@ -520,8 +620,10 @@ async function handleChartCommand(botToken, chatId, firstName, messageId, env) {
     }
   } catch {}
 
-  let chartText = \`🏆 <b>چارت مقامات و مشاهیر گروه</b> 🏆\\n\\n\`;
-  chartText += \`👑 <b>شاهنشاه</b> — <b>\${ownerName}</b> (مالک ارشد گروه)\\n\`;
+  let chartText = \`🏆 <b>| چارت مقامات و تالار افتخارات گروه</b>\\n\` +
+                  \`━━━━━━━━━━━━━━━━━━\\n\` +
+                  \`👑 <b>شاهنشاه (مالک ارشد):</b> <code>\${ownerName}</code>\\n\` +
+                  \`━━━━━━━━━━━━━━━━━━\\n\`;
 
   if (topUsers.results && topUsers.results.length > 0) {
     topUsers.results.forEach((user, idx) => {
@@ -530,30 +632,90 @@ async function handleChartCommand(botToken, chatId, firstName, messageId, env) {
       const rankTitle = userRank ? userRank.title : "سرباز سوم";
       const name = user.first_name || "کاربر ناشناس";
       
-      chartText += \`\${idx + 1}. \${rankEmoji} <b>\${rankTitle}</b> — \${name} — ✉️ <b>\${user.message_count}</b>\\n\`;
+      let medal = "🔹";
+      if (idx === 0) medal = "🥇";
+      else if (idx === 1) medal = "🥈";
+      else if (idx === 2) medal = "🥉";
+
+      chartText += \`\${medal} <b>رتبه \${idx + 1}:</b> <code>\${name}</code>\\n\` +
+                   \`↳ درجه: \${rankEmoji} <b>\${rankTitle}</b> | پیام‌ها: <code>\${user.message_count}</code>\\n\\n\`;
     });
   } else {
-    chartText += \`\\n<i>هنوز هیچ سربازی در میدان نبرد چت پیام ارسال نکرده است!</i>\`;
+    chartText += \`\\n<i>هنوز هیچ سربازی در میدان نبرد چت پیام ارسال نکرده است!</i>\\n\`;
   }
+  chartText += \`━━━━━━━━━━━━━━━━━━\\n\` +
+               \`✨ برای ارتقای جایگاه خود در تالار افتخارات، به چت در گروه ادامه دهید!\`;
 
-  await sendMessage(botToken, chatId, chartText, messageId);
+  const buttons = [
+    [
+      { text: "🎖️ رتبه نظامی من", callback_data: "show_my_rank_click" },
+      { text: "📜 لیست درجات نظامی", callback_data: "show_ranks_click" }
+    ],
+    [
+      { text: "⚙️ راهنمای جامع", callback_data: "show_help_click" }
+    ]
+  ];
+
+  await sendOrEditMessage(botToken, chatId, chartText, messageId, replyMarkupOverride || buttons, isEdit, messageId);
   return new Response("OK", { status: 200 });
 }
 
 /**
  * لیست تمامی درجات نظامی (/ranks)
  */
-async function handleRanksListCommand(botToken, chatId, messageId) {
-  let text = \`🎖️ <b>هرم درجات و مقامات گروه</b> 🎖️\\n\\n\`;
-  
-  text += \`👑 <b>شاهنشاه</b> — [بدون نیاز به پیش‌شرط پیام - ویژه مالک گروه]\\n\\n\`;
+async function handleRanksListCommand(botToken, chatId, messageId, replyMarkupOverride = null, isEdit = false) {
+  let text = \`🎖️ <b>| سلسله‌مراتب و هرم درجات نظامی گروه</b>\\n\` +
+             \`━━━━━━━━━━━━━━━━━━\\n\` +
+             \`👑 <b>شاهنشاه اعظم</b>\\n\` +
+             \`↳ <i>ویژه مالک ارشد گروه (بدون نیاز به امتیاز)</i>\\n\\n\`;
 
-  RANKS.forEach(r => {
-    const choiceText = r.group_choice_key ? " [انتخابی]" : "";
-    text += \`\${r.emoji} <b>\${r.title}</b> — حداقل پیام لازم: <b>\${r.min_messages}</b>\${choiceText}\\n\`;
+  RANKS.forEach((r, idx) => {
+    const isChoice = r.group_choice_key ? " 🌟 [انتخابی]" : "";
+    text += \`\${r.emoji} <b>درجه \${idx + 1}: \${r.title}</b>\\n\` +
+            \`↳ حدنصاب پیام لازم: <code>\${r.min_messages}</code> پیام\${isChoice}\\n\\n\`;
   });
+  text += \`━━━━━━━━━━━━━━━━━━\\n\` +
+          \`📢 ارتقای درجه شما کاملاً خودکار بوده و پس از رسیدن به حدنصاب، تگ درجه شما در گروه نصب خواهد شد!\`;
 
-  await sendMessage(botToken, chatId, text, messageId);
+  const buttons = [
+    [
+      { text: "🎖️ رتبه نظامی من", callback_data: "show_my_rank_click" },
+      { text: "📊 جدول برترین‌ها (چارت)", callback_data: "show_chart_click" }
+    ],
+    [
+      { text: "⚙️ راهنمای جامع", callback_data: "show_help_click" }
+    ]
+  ];
+
+  await sendOrEditMessage(botToken, chatId, text, messageId, replyMarkupOverride || buttons, isEdit, messageId);
+  return new Response("OK", { status: 200 });
+}
+
+/**
+ * نمایش راهنما و اطلاعات جامع ربات (/help)
+ */
+async function handleHelpCommand(botToken, chatId, messageId, isEdit = false) {
+  const helpText = \`⚙️ <b>| راهنمای جامع سیستم نظامی رتبه‌بندی</b>\\n\` +
+                   \`━━━━━━━━━━━━━━━━━━\\n\` +
+                   \`🤖 این ربات به صورت لحظه‌ای و هوشمند چت‌های فعال گروه را ردیابی کرده و بر اساس میزان فعالیت، درجات نظامی خاص اعطا می‌کند.\\n\\n\` +
+                   \`👑 <b>چگونه ارتقا درجه بگیریم؟</b>\\n\` +
+                   \`کافیست در گروه چت کنید! سیستم هر پیام شما را شمرده و به محض رسیدن به حدنصاب، رتبه جدید به همراه برچسب (Tag) اختصاصی برای شما ثبت می‌شود.\\n\\n\` +
+                   \`⚠️ <b>قوانین ضد اسپم:</b>\\n\` +
+                   \`بین پیام‌های ارسالی باید حداقل <b>۲ ثانیه</b> فاصله باشد، در غیر این صورت پیام دوم شمارش نخواهد شد.\\n\\n\` +
+                   \`📲 <b>دکمه‌های تعاملی سریع:</b>\\n\` +
+                   \`با استفاده از دکمه‌های تعاملی زیر پیام‌ها یا کیبورد ثابت پایین صفحه، می‌توانید بدون نیاز به نوشتن دستورات با ربات کار کنید.\`;
+
+  const buttons = [
+    [
+      { text: "🎖️ رتبه نظامی من", callback_data: "show_my_rank_click" },
+      { text: "📊 جدول برتر (چارت)", callback_data: "show_chart_click" }
+    ],
+    [
+      { text: "📜 هرم درجات نظامی", callback_data: "show_ranks_click" }
+    ]
+  ];
+
+  await sendOrEditMessage(botToken, chatId, helpText, messageId, buttons, isEdit, messageId);
   return new Response("OK", { status: 200 });
 }
 
